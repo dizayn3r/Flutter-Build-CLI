@@ -1,11 +1,11 @@
 {
   "name": "flutter-build-cli",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "CLI tool for building and managing Flutter apps",
   "main": "index.js",
   "type": "module",
   "bin": {
-    "flutter-build-cli": "./index.js"
+    "flutter-build-cli": "index.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
