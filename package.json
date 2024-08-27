@@ -1,0 +1,22 @@
+{
+  "name": "flutter-build-cli",
+  "version": "1.0.0",
+  "description": "CLI tool for building and managing Flutter apps",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "flutter-build-cli": "./index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "child_process": "^1.0.2",
+    "inquirer": "^10.1.8",
+    "path": "^0.12.7",
+    "yaml": "^2.5.0"
+  }
+}
