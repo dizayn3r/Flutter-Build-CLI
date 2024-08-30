@@ -1,172 +1,129 @@
 #!/usr/bin/env node
 
-import { existsSync, renameSync, readFileSync } from 'fs';
+import * as p from '@clack/prompts';
+import { setTimeout } from 'node:timers/promises';
 import { join } from 'path';
-import { parse } from 'yaml';
-import inquirer from "inquirer";
-import { exec } from 'child_process';
-
-const PUBSPEC_FILE = 'pubspec.yaml';
-const APK_OUTPUT_DIR = join('build', 'app', 'outputs', 'flutter-apk');
-const ONEDRIVE_REMOTE = 'ApploreOneDrive'; // Replace with your actual remote name
-
-function findPubspec() {
-    const filePath = join(process.cwd(), PUBSPEC_FILE);
-    if (!existsSync(filePath)) {
-        console.error(`Error: ${PUBSPEC_FILE} not found in the current directory.`);
-        process.exit(1);
-    }
-    return filePath;
-}
-
-function getPackageName(pubspecPath) {
-    const fileContents = readFileSync(pubspecPath, 'utf8');
-    const pubspec = parse(fileContents);
-
-    if (!pubspec?.name) {
-        console.error('Error: package name not found in pubspec.yaml');
-        process.exit(1);
-    }
-
-    return pubspec.name
-        .split('_')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-}
-
-function getPackageVersion(pubspecPath) {
-    const fileContents = readFileSync(pubspecPath, 'utf8');
-    const pubspec = parse(fileContents);
-
-    if (!pubspec?.version) {
-        console.error('Error: package version not found in pubspec.yaml');
-        process.exit(1);
-    }
-
-    return pubspec.version;
-}
-
-async function promptUser() {
-    const { buildMode } = await inquirer.prompt({
-        type: 'list',
-        name: 'buildMode',
-        message: 'Select a build mode:',
-        choices: ['debug', 'release', 'profile'],
-    });
-
-    const { environment } = await inquirer.prompt({
-        type: 'list',
-        name: 'environment',
-        message: 'Select an environment mode:',
-        choices: ['dev', 'uat', 'prod'],
-    });
-
-    const { buildType } = await inquirer.prompt({
-        type: 'list',
-        name: 'buildType',
-        message: 'Select a build type:',
-        choices: ['appbundle', 'apk', 'aab'],
-    });
-
-    return { buildMode, environment, buildType };
-}
-
-function buildApk(packageName, version, environment, buildMode) {
-    const command = `flutter build apk --target lib/main.dart --${buildMode}`;
-    console.log(`Running command: ${command}`);
-
-    exec(command, (error, stdout, stderr) => {
-        if (error || stderr) {
-            console.error(`Error building APK: ${error?.message || stderr}`);
-            process.exit(1);
-        }
-
-        console.log(`Build output: ${stdout}`);
-        const apkPath = renameApk(packageName, version, environment, buildMode);
-        askToUpload(apkPath, packageName, version, environment);
-    });
-}
-
-function getCurrentDateTime() {
-    const now = new Date();
-    const pad = num => String(num).padStart(2, '0');
-
-    return `(${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())})`;
-}
-
-function renameApk(packageName, version, environment, buildMode) {
-    const apkName = buildMode === 'release' ? 'app-release.apk' : `app-${buildMode}.apk`;
-    const oldApkPath = join(APK_OUTPUT_DIR, apkName);
-    const dateTime = getCurrentDateTime();
-    const newApkName = `${packageName} ${environment.toUpperCase()} ${version} ${dateTime}.apk`;
-    const newApkPath = join(APK_OUTPUT_DIR, newApkName);
-
-    if (!existsSync(oldApkPath)) {
-        console.error(`Error: APK file not found at ${oldApkPath}`);
-        process.exit(1);
-    }
-
-    renameSync(oldApkPath, newApkPath);
-    console.log(`APK renamed to: ${newApkName}`);
-    return newApkPath;
-}
-
-async function askToUpload(apkPath, packageName, version, environment) {
-    const { confirmUpload } = await inquirer.prompt({
-        type: 'confirm',
-        name: 'confirmUpload',
-        message: 'Do you want to upload the APK to OneDrive?',
-        default: true,
-    });
-
-    if (confirmUpload) {
-        uploadToOneDrive(apkPath, packageName, version, environment.toUpperCase());
-    } else {
-        console.log('APK upload skipped.');
-    }
-}
-
-function uploadToOneDrive(apkPath, packageName, version, environment) {
-    const uploadPath = `${packageName}/${environment}/${version}/`;
-    const uploadCommand = `rclone copy "${apkPath}" ${ONEDRIVE_REMOTE}:"${uploadPath}" --progress`;
-    const uploadProcess = exec(uploadCommand);
-
-    uploadProcess.stdout.on('data', data => {
-        const output = data.toString();
-        const match = output.match(/(\d{1,3})%/);
-        if (match) {
-            process.stdout.clearLine();
-            process.stdout.cursorTo(0);
-            process.stdout.write(`Uploading APK to OneDrive...: ${match[1]}%`);
-        }
-    });
-
-    uploadProcess.stderr.on('data', data => {
-        process.stderr.write(data);
-    });
-
-    uploadProcess.on('close', code => {
-        if (code === 0) {
-            process.stdout.clearLine();
-            process.stdout.cursorTo(0);
-            console.log('\nAPK successfully uploaded');
-        } else {
-            console.error(`\nError uploading APK, exited with code ${code}`);
-        }
-    });
-}
-
-
+import color from 'picocolors';
+import { getPackageName, getPackageVersion } from './helpers/packageUtils.js';
+import build from './helpers/build.js';
+import rename from './helpers/rename.js';
+import upload from './helpers/upload.js';
 
 async function main() {
-    const pubspecPath = findPubspec();
+	console.clear();
+
+	await setTimeout(500);
+
+	p.intro(`${color.bgCyan(color.black('Flutter Build CLI'))}`);
+
+	const project = await p.group(
+		{
+            projectPath: () =>
+                p.text({
+                    message: 'Enter the location of the Flutter project:',
+                    initialValue: './',
+                    defaultValue: './',
+                    validate: (value) => {
+                        if (!value) return 'Please enter a project path.';
+                    },
+                }),
+			buildMode: () =>
+				p.select({
+					message: 'Pick a build mode (default: debug)',
+					initialValue: 'debug',
+					maxItems: 3,
+					options: [
+						{ value: 'debug', label: 'Debug' },
+						{ value: 'profile', label: 'Profile' },
+						{ value: 'release', label: 'Release' },
+					],
+				}),
+			environment: () =>
+				p.select({
+					message: 'Pick an environment (default: dev)',
+					initialValue: 'dev',
+					maxItems: 3,
+					options: [
+						{ value: 'dev', label: 'Development' },
+						{ value: 'staging', label: 'Staging' },
+						{ value: 'prod', label: 'Production' },
+					],
+				}),
+			target: () =>
+				p.text({
+					message: 'Enter the path of the target file for the build?',
+					initialValue: 'lib/main.dart',
+					defaultValue: 'lib/main.dart',
+					validate: (value) => {
+						if (!value) return 'Please enter a path.';
+						if (!value.includes('.dart')) return 'Please include the file name in the path.';
+					},
+				}),
+			buildType: () =>
+				p.select({
+					message: 'Pick a build type (default: apk)',
+					initialValue: 'apk',
+					maxItems: 3,
+					options: [
+						{ value: 'apk', label: 'APK' },
+						{ value: 'appbundle', label: 'App Bundle' },
+					],
+				}),
+			upload: () =>
+				p.confirm({
+					message: 'Upload to OneDrive?',
+					initialValue: false,
+				}),
+		},
+		{
+			onCancel: () => {
+				p.cancel('Operation cancelled.');
+				process.exit(0);
+			},
+		}
+	);
+
+    const pubspecPath = join(project.projectPath, 'pubspec.yaml');
     const packageName = getPackageName(pubspecPath);
-    const version = getPackageVersion(pubspecPath);
-    console.log(`Package name: ${packageName}`);
+    const packageVersion = getPackageVersion(pubspecPath);
 
-    const { buildMode, environment } = await promptUser();
+	p.note(
+		`Package Name: ${packageName}\nVersion: ${packageVersion}\nBuild Mode: ${project.buildMode}\nEnvironment: ${project.environment}\nBuild Type: ${project.buildType}\nTarget: ${project.target}\nUpload to OneDrive: ${project.upload ? 'Yes' : 'No'}`,
+		'Build Information'
+	);
 
-    buildApk(packageName, version, environment, buildMode);
+	const s = p.spinner();
+	s.start('Building...');
+
+	const status = await build(project.buildType, project.target, project.buildMode);
+
+	s.stop(status ? 'Build complete' : 'Build failed');
+
+	if (status) {
+		p.outro(`${color.bgGreen(color.black('Build successful'))}`);
+		const buildPath = rename(project.buildType, packageName, packageVersion, project.environment, project.buildMode);
+		p.note(`Build path: ${buildPath}`, 'Build Path');
+
+		if (project.upload) {
+			const destinationPath = await p.text({
+				message: 'Enter the destination path to move the build:',
+				validate: (value) => {
+					if (!value) return 'Please enter a destination path.';
+				},
+			});
+
+			const fullDestinationPath = join(destinationPath, packageName, project.environment, packageVersion);
+			const uploadStatus = await upload(buildPath, fullDestinationPath);
+
+			if (uploadStatus) {
+				p.outro(`${color.bgGreen(color.black('Build successfully moved to destination'))}`);
+			} else {
+				p.outro(`${color.bgRed(color.black('Failed to move build to destination'))}`);
+			}
+		}
+	} else {
+		p.outro(`${color.bgRed(color.black('Build failed'))}`);
+	}
 }
 
-main();
+main().catch(console.error);

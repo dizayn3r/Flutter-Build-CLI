@@ -8,14 +8,24 @@
     "flutter-build-cli": "index.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "Flutter",
+    "CLI"
+  ],
+  "author": "Shashi Kant",
   "license": "ISC",
   "dependencies": {
+    "@clack/prompts": "^0.7.0",
+    "boxen": "^8.0.1",
+    "chalk": "^5.3.0",
     "child_process": "^1.0.2",
+    "figures": "^6.1.0",
+    "fs": "^0.0.1-security",
     "inquirer": "^10.1.8",
+    "mock-inquirer": "^1.0.3",
+    "ora": "^8.1.0",
     "path": "^0.12.7",
     "yaml": "^2.5.0"
   }
