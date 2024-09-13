@@ -45,6 +45,7 @@ async function main() {
 					maxItems: 3,
 					options: [
 						{ value: 'dev', label: 'Development' },
+						{ value: 'uat', label: 'UAT' },
 						{ value: 'staging', label: 'Staging' },
 						{ value: 'prod', label: 'Production' },
 					],
@@ -88,7 +89,7 @@ async function main() {
     const packageVersion = getPackageVersion(pubspecPath);
 
 	p.note(
-		`Package Name: ${packageName}\nVersion: ${packageVersion}\nBuild Mode: ${project.buildMode}\nEnvironment: ${project.environment}\nBuild Type: ${project.buildType}\nTarget: ${project.target}\nUpload to OneDrive: ${project.upload ? 'Yes' : 'No'}`,
+		`Package Name: ${packageName}\nVersion: ${packageVersion}\nBuild Mode: ${project.buildMode}\nEnvironment: ${project.environment.toUpperCase()}\nBuild Type: ${project.buildType}\nTarget: ${project.target}\nUpload to OneDrive: ${project.upload ? 'Yes' : 'No'}`,
 		'Build Information'
 	);
 
